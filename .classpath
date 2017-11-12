@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="annotation"/>
+	<classpathentry kind="src" path="generator"/>
+	<classpathentry kind="src" path="ajaxcore"/>
+	<classpathentry kind="src" path="ajaxrpc"/>
+	<classpathentry kind="src" path="ajaxpipe"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
