@@ -327,10 +327,13 @@ public class SimpleRPCRequest {
 					byte[] responseBytes = request.getResponseBytes();
 					if (responseBytes == null || responseBytes.length == 0
 							|| !runnable.deserializeBytes(responseBytes)) {
+						//System.out.println("AJAX failed " + responseBytes + " length=" + (responseBytes != null ? responseBytes.length : -1));
+						new RuntimeException("AJAX Failed.").printStackTrace();
 						runnable.ajaxFail(); // should seldom fail!
 						return;
 					}
 				}
+				//System.out.println("AJAX Success!");
 				runnable.ajaxOut();
 			}
 		});

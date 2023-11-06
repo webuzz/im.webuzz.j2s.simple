@@ -1,5 +1,7 @@
 package net.sf.j2s.ajax;
 
+import net.sf.j2s.annotation.J2SIgnore;
+
 public abstract class CompoundPipeSession extends SimplePipeRunnable {
 
 	public static final class PipeSessionClosedEvent extends CompoundSerializable {
@@ -13,7 +15,7 @@ public abstract class CompoundPipeSession extends SimplePipeRunnable {
 	@Override
 	public void ajaxRun() {
 		lastLiveDetected = System.currentTimeMillis();
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey, true);
 		if (pipe != null) {
 			pipeAlive = pipeSetup();
 			updateStatus(pipeAlive);
@@ -31,7 +33,7 @@ public abstract class CompoundPipeSession extends SimplePipeRunnable {
 	public void pipeCreated() {
 		super.pipeCreated();
 		
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey, pipeData != null);
 		if (pipe instanceof CompoundPipeRunnable) {
 			CompoundPipeRunnable cp = (CompoundPipeRunnable) pipe;
 			if (cp.status < 3) {
@@ -58,7 +60,7 @@ public abstract class CompoundPipeSession extends SimplePipeRunnable {
 			pipeThrough(evt);
 		}
 
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey, pipeData != null);
 		if (pipe == null) {
 			pipe = parent;
 		}
@@ -106,11 +108,12 @@ public abstract class CompoundPipeSession extends SimplePipeRunnable {
 		return null;
 	}
 
+	@J2SIgnore
 	@Override
 	public void pipeThrough(Object... args) {
 		if (args == null || args.length == 0) return;
 		
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey, true);
 		if (!(pipe instanceof CompoundPipeRunnable)) return;
 		CompoundPipeRunnable cp = (CompoundPipeRunnable) pipe;
 		CompoundPipeSession sp = cp.getSession(session);
@@ -150,7 +153,7 @@ public abstract class CompoundPipeSession extends SimplePipeRunnable {
 			return true;
 		}
 		this.updateStatus(false);
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(this.pipeKey);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(this.pipeKey, false);
 		if (pipe == null) {
 			pipe = this.parent;
 		}
@@ -171,7 +174,7 @@ public abstract class CompoundPipeSession extends SimplePipeRunnable {
 			String pipeKey = this.pipeKey;
 			pipe.pipeDestroy();
 			if (pipeKey != null && pipeKey.length() > 0) {
-				SimplePipeHelper.removePipe(pipeKey);
+				SimplePipeHelper.removePipe(pipeKey, false);
 			}
 		}
 		

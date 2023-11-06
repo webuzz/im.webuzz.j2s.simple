@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import net.sf.j2s.annotation.J2SIgnore;
 import net.sf.j2s.annotation.J2SKeep;
@@ -212,10 +213,10 @@ public class SimpleSerializable implements Cloneable {
 	}
 	
 	@J2SIgnore
-	static Map<String, Field> getSerializableFields(String clazzName, Class<?> clazz) {
+	static Map<String, Field> getSerializableFields(Class<?> clazz) {
 		Map<String, Field> fields = quickFields.get(clazz);
 		if (fields == null) {
-			fields = new HashMap<String, Field>();
+			fields = new ConcurrentHashMap<String, Field>();
 			Class<?> oClazz = clazz;
 			while (oClazz != null && !"net.sf.j2s.ajax.SimpleSerializable".equals(oClazz.getName())) {
 				Field[] clazzFields = oClazz.getDeclaredFields();
@@ -581,7 +582,8 @@ return strBuf;
 			}
 			clazzName = clazz.getName();
 		}
-		if (getSimpleVersion() >= 202 && classNameAbbrev) {
+		boolean supportsMapping = getSimpleVersion() >= 202;
+		if (supportsMapping && classNameAbbrev) {
 			String shortClazzName = classNameMappings.get(clazzName);
 			if (shortClazzName != null) {
 				builder.append(shortClazzName);
@@ -594,10 +596,14 @@ return strBuf;
 		builder.append("#00000000$"); // later the number of size will be updated!
 		int headSize = builder.length();
 
-		Map<String, Field> fields = getSerializableFields(clazzName, this.getClass());
+		Map<String, Field> fields = getSerializableFields(this.getClass());
 		boolean ignoring = (filter == null || filter.ignoreDefaultFields());
-		String[] fMap = fieldMapping();
-		Map<String, String> fieldNameMap = getSimpleVersion() >= 202 ? fieldNameMapping() : null;
+		String[] fMap = null;
+		Map<String, String> fieldNameMap = null;
+		if (supportsMapping) {
+			fMap = fieldMapping();
+			fieldNameMap = fieldNameMapping();
+		}
 		try {
 			for (Iterator<Entry<String, Field>> itr = fields.entrySet().iterator(); itr.hasNext();) {
 				Entry<String, Field> entry = (Entry<String, Field>) itr.next();
@@ -1014,7 +1020,8 @@ return strBuf;
 			}
 			clazzName = clazz.getName();
 		}
-		if (getSimpleVersion() >= 202 && classNameAbbrev) {
+		boolean supportsMapping = getSimpleVersion() >= 202;
+		if (supportsMapping && classNameAbbrev) {
 			String shortClazzName = classNameMappings.get(clazzName);
 			if (shortClazzName != null) {
 				dos.writeBytes(shortClazzName);
@@ -1027,10 +1034,14 @@ return strBuf;
 		dos.writeBytes("#00000000$"); // later the number of size will be updated!
 		int headSize = dos.size();
 
-		Map<String, Field> fields = getSerializableFields(clazzName, this.getClass());
+		Map<String, Field> fields = getSerializableFields(this.getClass());
 		boolean ignoring = (filter == null || filter.ignoreDefaultFields());
-		Map<String, String> fieldNameMap = getSimpleVersion() >= 202 ? fieldNameMapping() : null;
-		String[] fMap = fieldNameMap == null ? fieldMapping() : null;
+		String[] fMap = null;
+		Map<String, String> fieldNameMap = null;
+		if (supportsMapping) {
+			fMap = fieldMapping();
+			fieldNameMap = fieldNameMapping();
+		}
 		try {
 			for (Iterator<Entry<String, Field>> itr = fields.entrySet().iterator(); itr.hasNext();) {
 				Entry<String, Field> entry = (Entry<String, Field>) itr.next();
@@ -2256,7 +2267,7 @@ if (ss != null) {
 		boolean commasAppended = false;
 		boolean ignoring = (filter == null || filter.ignoreDefaultFields());
 		Class<?> clazzType = this.getClass();
-		Map<String, Field> fieldMap = getSerializableFields(clazzType.getName(), clazzType);
+		Map<String, Field> fieldMap = getSerializableFields(clazzType);
 		String[] fMap = fieldMapping();
 		for (Iterator<String> itr = fieldMap.keySet().iterator(); itr.hasNext();) {
 			String fieldName = (String) itr.next();
@@ -3086,7 +3097,7 @@ return true;
 		}
 		
 		Class<?> clazzType = this.getClass();
-		Map<String, Field> fieldMap = getSerializableFields(clazzType.getName(), clazzType);
+		Map<String, Field> fieldMap = getSerializableFields(clazzType);
 		int objectEnd = index + size;
 		Map<String, String> fieldAliasMap = getSimpleVersion() >= 202 ? fieldAliasMapping() : null;
 		String[] fMap = fieldAliasMap == null ? fieldMapping() : null;
@@ -3576,7 +3587,7 @@ return true;
 		}
 		
 		Class<?> clazzType = this.getClass();
-		Map<String, Field> fieldMap = getSerializableFields(clazzType.getName(), clazzType);
+		Map<String, Field> fieldMap = getSerializableFields(clazzType);
 		int objectEnd = index + size;
 		Map<String, String> fieldAliasMap = getSimpleVersion() >= 202 ? fieldAliasMapping() : null;
 		String[] fMap = fieldAliasMap == null ? fieldMapping() : null;
@@ -4019,7 +4030,8 @@ return true;
 		}
 		return SIMPLE_OK;
 	}
-	
+
+	@J2SIgnore
 	private Class<?> exactGenericClass(Type extraGenericType) {
 		if (extraGenericType == null) return null;
 		if (extraGenericType instanceof WildcardType) {
@@ -4842,7 +4854,7 @@ return true;
 		if (longClazzName != null) {
 			clazzName = longClazzName;
 		}
-		Map<String, Field> fieldMap = getSerializableFields(clazzName, this.getClass());
+		Map<String, Field> fieldMap = getSerializableFields(this.getClass());
 		String[] fMap = fieldMapping();
 		for (Iterator<String> itr = properties.keySet().iterator(); itr.hasNext();) {
 			String fieldName = (String) itr.next();
@@ -5122,7 +5134,7 @@ return true;
 		clone.simpleVersion = simpleVersion;
 		
 		Class<? extends SimpleSerializable> clazz = this.getClass();
-		Map<String, Field> fields = getSerializableFields(clazz.getName(), clazz);
+		Map<String, Field> fields = getSerializableFields(clazz);
 		for (Iterator<Field> itr = fields.values().iterator(); itr.hasNext();) {
 			Field field = (Field) itr.next();
 			Class<?> type = field.getType();
@@ -5198,7 +5210,7 @@ return true;
 				runnableClass = Class.forName(clazzName);
 			}
 			if (runnableClass != null) {
-				return runnableClass.newInstance();
+				return runnableClass.getDeclaredConstructor().newInstance();
 			}
 		} catch (Exception e) {
 			//e.printStackTrace();

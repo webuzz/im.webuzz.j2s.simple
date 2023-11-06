@@ -17,8 +17,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
-import net.sf.j2s.ajax.SimpleRPCRunnable;
-import net.sf.j2s.ajax.SimpleSerializable;
+//import net.sf.j2s.ajax.SimpleRPCRunnable;
+//import net.sf.j2s.ajax.SimpleSerializable;
 import net.sf.j2s.annotation.J2SIgnore;
 import net.sf.j2s.annotation.J2SNative;
 import net.sf.j2s.annotation.J2SRequireImport;
@@ -191,7 +191,7 @@ public abstract class SimplePipeRunnable extends SimpleRPCRunnable {
 		pipeAlive = true; // Mark pipe as alive for some seconds, as #pipeSetup might take some seconds
 		pipeAlive = pipeSetup();
 		if (!pipeAlive) {
-			SimplePipeHelper.removePipe(pipeKey);
+			SimplePipeHelper.removePipe(pipeKey, true);
 			pipeKey = null;
 			return; // setup failed
 		}
@@ -289,7 +289,7 @@ public abstract class SimplePipeRunnable extends SimpleRPCRunnable {
 		pipeAlive = false;
 		destroyed = true;
 		if (pipeKey != null) {
-			SimplePipeHelper.removePipe(pipeKey);
+			SimplePipeHelper.removePipe(pipeKey, pipeData != null);
 			pipeKey = null;
 		}
 		pipeClearData();
@@ -556,7 +556,7 @@ return false;
 	 * @j2sIgnore
 	 */
 	public void pipeThrough(Object ... args) {
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey, true);
 		if (pipe == null) return;
 		SimpleSerializable[] objs = pipe.through(args);
 		
@@ -583,7 +583,7 @@ return false;
 	 */
 	public void pipeThrough(SimpleSerializable ... args) {
 		if (args == null || args.length == 0) return;
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(pipeKey, true);
 		if (pipe == null) return;
 		//if (pipe instanceof SimplePipeRunnable) {
 			//SimplePipeRunnable pipeRunnable = (SimplePipeRunnable) pipe;

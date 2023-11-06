@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import net.sf.j2s.ajax.SimpleSerializable;
+//import net.sf.j2s.ajax.SimpleSerializable;
 import net.sf.j2s.annotation.J2SIgnore;
 import net.sf.j2s.annotation.J2SNative;
 
@@ -59,6 +59,9 @@ public class SimplePipeHelper {
 	private static Map<String, SimplePipeRunnable> pipes = new ConcurrentHashMap<String, SimplePipeRunnable>(50);
 
 	@J2SIgnore
+	private static Map<String, SimplePipeRunnable> serverPipes = new ConcurrentHashMap<String, SimplePipeRunnable>(50);
+
+	@J2SIgnore
 	private static BlockingQueue<SimplePipeRunnable> toBeDestroyedPipes = new LinkedBlockingQueue<SimplePipeRunnable>();
 	
 	@J2SIgnore
@@ -92,10 +95,10 @@ public class SimplePipeHelper {
 		}
 		// if (pipe == null) return null; // should never register null pipe!
 		String key = nextPipeKey();
-		while (pipes.get(key) != null) {
+		while (serverPipes.get(key) != null) {
 			key = nextPipeKey();
 		}
-		pipes.put(key, pipe); // FIXME: In rare case, it will override another pipe
+		serverPipes.put(key, pipe); // FIXME: In rare case, it will override another pipe
 		
 //		if (pipeMap == null) {
 //			pipeMap = new ConcurrentHashMap<String, List<SimpleSerializable>>();
@@ -137,13 +140,13 @@ public class SimplePipeHelper {
 		"	delete sph.allPipes[key];",
 		"}"
 	})
-	public static void removePipe(String key) {
+	public static void removePipe(String key, boolean serverMode) {
 		if (key == null) {
 			System.out.println("Removing pipe for null key???");
 			new RuntimeException("Removing null pipe key").printStackTrace();
 			return;
 		}
-		SimplePipeRunnable pipe = pipes.remove(key);
+		SimplePipeRunnable pipe = (serverMode ? serverPipes : pipes).remove(key);
 		if (pipe != null) {
 			pipe.pipeAlive = false;
 			pipe.pipeClearData();
@@ -165,15 +168,15 @@ public class SimplePipeHelper {
 		"if (ps == null || key == null) return null;",
 		"return ps[key];"
 	})
-	public static SimplePipeRunnable getPipe(String key) {
+	public static SimplePipeRunnable getPipe(String key, boolean serverMode) {
 		if (key == null) return null;
-		return pipes.get(key);
+		return (serverMode ? serverPipes : pipes).get(key);
 	}
 
 	// Use this method to avoid HTTP repeat attacks
 	@J2SIgnore
 	public static SimplePipeRunnable checkPipeWithHash(String key, long hash) {
-		SimplePipeRunnable p = getPipe(key);
+		SimplePipeRunnable p = getPipe(key, true);
 		if (p == null) {
 			return null;
 		}
@@ -194,7 +197,7 @@ public class SimplePipeHelper {
 
 	@J2SIgnore
 	public static void pipeIn(String key, SimpleSerializable[] ss) {
-		SimplePipeRunnable pipe = getPipe(key);
+		SimplePipeRunnable pipe = getPipe(key, true);
 		List<SimpleSerializable> list = pipe != null ? pipe.pipeData : null; //getPipeDataList(key);
 		if (pipe == null || list == null) {
 			System.out.println("There are no pipe listening?!!!!");
@@ -264,7 +267,7 @@ public class SimplePipeHelper {
 
 	@J2SIgnore
 	public static boolean isPipeLive(String key) {
-		SimplePipeRunnable pipe = getPipe(key);
+		SimplePipeRunnable pipe = getPipe(key, true);
 		if (pipe != null) {
 			return pipe.isPipeLive();
 		}
@@ -273,7 +276,7 @@ public class SimplePipeHelper {
 	
 	@J2SIgnore
 	public static boolean notifyPipeStatus(String key, boolean live) {
-		SimplePipeRunnable pipe = getPipe(key);
+		SimplePipeRunnable pipe = getPipe(key, true);
 		if (pipe != null && pipe.isPipeLive()) {
 			pipe.updateStatus(live);
 			return true;
@@ -385,7 +388,7 @@ public class SimplePipeHelper {
 							String pipeKey = pipe.pipeKey;
 							asyncDestroyPipe(pipe);
 							if (pipeKey != null && pipeKey.length() > 0) {
-								removePipe(pipeKey);
+								removePipe(pipeKey, true);
 							}
 						}
 					} else {

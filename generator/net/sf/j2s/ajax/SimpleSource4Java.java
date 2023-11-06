@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import net.sf.j2s.ajax.SimpleSerializable;
+//import net.sf.j2s.ajax.SimpleSerializable;
 import net.sf.j2s.ajax.annotation.SimpleComment;
 import net.sf.j2s.ajax.annotation.SimpleIn;
 import net.sf.j2s.ajax.annotation.SimpleInOut;
@@ -39,7 +39,7 @@ import net.sf.j2s.ajax.annotation.SimpleOut;
  */
 public class SimpleSource4Java {
 	
-	static String folder = "Project";
+	//static String folder = "Project";
 	static String author = "Author";
 	static String company = "Company";
 
@@ -179,9 +179,11 @@ public class SimpleSource4Java {
 		Class<?> clazz = s.getClass();
 		String clazzName = clazz.getName();
 		String simpleClazzName = clazzName;
+		String currentPackage = null;
 		int idx = clazzName.lastIndexOf('.');
 		if (idx != -1) {
-			source.append("package ").append(simpleClazzName.substring(0, idx)).append(";\r\n");
+			currentPackage = simpleClazzName.substring(0, idx);
+			source.append("package ").append(currentPackage).append(";\r\n");
 			source.append("\r\n");
 			
 			simpleClazzName = clazzName.substring(idx + 1);
@@ -214,7 +216,13 @@ public class SimpleSource4Java {
 				hasMoreImports = true;
 				if (!importedClasses.contains(typeName)) {
 					String simpleTypeName = typeName;
-					source.append("import ").append(simpleTypeName).append(";\r\n");
+					if (currentPackage != null && currentPackage.length() > 0
+							&& simpleTypeName.startsWith(currentPackage)
+							&& !simpleTypeName.substring(currentPackage.length() + 1).contains(".")) {
+						System.out.println("Ignore class " + simpleTypeName + " for same package " + currentPackage);
+					} else {
+						source.append("import ").append(simpleTypeName).append(";\r\n");
+					}
 					importedClasses.add(typeName);
 				}
 			}
@@ -267,7 +275,13 @@ public class SimpleSource4Java {
 		Class<?> superClazz = s.getClass().getSuperclass();
 		if (superClazz != null) {
 			String superClazzName = superClazz.getName();
-			source.append("import ").append(superClazzName).append(";\r\n");
+			if (currentPackage != null && currentPackage.length() > 0
+					&& superClazzName.startsWith(currentPackage)
+					&& !superClazzName.substring(currentPackage.length() + 1).contains(".")) {
+				System.out.println("Ignore class " + superClazzName + " for same package " + currentPackage);
+			} else {
+				source.append("import ").append(superClazzName).append(";\r\n");
+			}
 			if (fieldMapping != null && fieldMappings.size() > 0 && System.getProperty("j2s.supports.web") != null) {
 				source.append("import net.sf.j2s.annotation.J2SIgnore;\r\n");
 			}
@@ -363,7 +377,7 @@ public class SimpleSource4Java {
 		SourceUtils.insertLineComment(source, "\t", index++, true);
 		
 		if (fieldMapping != null) {
-			Map<String, Field> allFields = SimpleSerializable.getSerializableFields(clazzName, clazz);
+			Map<String, Field> allFields = SimpleSerializable.getSerializableFields(clazz);
 			for (Iterator<String> itr = allFields.keySet().iterator(); itr.hasNext();) {
 				String name = itr.next();
 				boolean existed = false;
@@ -403,9 +417,9 @@ public class SimpleSource4Java {
 			}
 		}
 		if (fieldMappings != null && fieldMappings.size() > 0) {
-			if (System.getProperty("j2s.supports.web") != null) {
-				source.append("\t@J2SIgnore\r\n");
-			}
+//			if (System.getProperty("j2s.supports.web") != null) {
+//				source.append("\t@J2SIgnore\r\n");
+//			}
 			source.append("\tprivate static String[] mappings = new String[] {\r\n");
 			for (Iterator<String> itr = fieldMappings.keySet().iterator(); itr.hasNext();) {
 				String key = (String) itr.next();
@@ -523,6 +537,10 @@ public class SimpleSource4Java {
 			source.append("\tprotected Map<String, String> fieldAliasMapping() {\r\n");
 			source.append("\t\treturn aliasMappings;\r\n");
 			source.append("\t}\r\n\r\n");
+			source.append("\t@Override\r\n");
+			source.append("\tprotected String[] fieldMapping() {\r\n");
+			source.append("\t\treturn mappings;\r\n");
+			source.append("\t}\r\n\r\n");
 			moreCodesAdded = true;
 		}
 		if (s.bytesCompactMode()) {
@@ -598,7 +616,7 @@ public class SimpleSource4Java {
 				source.append("\r\n");
 			}
 			moreCodesAdded = true;
-		} else if (s instanceof SimpleRPCRunnable) {
+		} else if (s instanceof SimpleRPCRunnable && "net.sf.j2s.ajax.SimpleRPCRunnable".equals(superClazz.getName())) {
 			source.append("\t@Override\r\n");
 			source.append("\tpublic void ajaxRun() {\r\n");
 			source.append("\t}\r\n");
@@ -811,7 +829,7 @@ public class SimpleSource4Java {
 				return;
 			}
 		}
-		folder = f.getName();
+		//folder = f.getName();
 		author = args[1];
 		company = args[2];
 		String mappingClass = args[3];

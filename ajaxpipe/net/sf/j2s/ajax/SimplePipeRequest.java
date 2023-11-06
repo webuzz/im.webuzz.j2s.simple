@@ -14,10 +14,10 @@ import java.io.ByteArrayOutputStream;
 import java.util.LinkedList;
 import java.util.List;
 
-import net.sf.j2s.ajax.HttpRequest;
-import net.sf.j2s.ajax.SimpleRPCRequest;
-import net.sf.j2s.ajax.SimpleSerializable;
-import net.sf.j2s.ajax.XHRCallbackAdapter;
+//import net.sf.j2s.ajax.HttpRequest;
+//import net.sf.j2s.ajax.SimpleRPCRequest;
+//import net.sf.j2s.ajax.SimpleSerializable;
+//import net.sf.j2s.ajax.XHRCallbackAdapter;
 import net.sf.j2s.annotation.J2SIgnore;
 
 /**
@@ -27,6 +27,7 @@ import net.sf.j2s.annotation.J2SIgnore;
  * @j2sSuffix
  * window["$p1p3p$"] = net.sf.j2s.ajax.SimplePipeRequest.parseReceived;
  * window["$p1p3b$"] = net.sf.j2s.ajax.SimplePipeRequest.pipeNotifyCallBack;
+ * net.sf.j2s.ajax.SimplePipeRequest.isJavaScript = true;
  */
 public class SimplePipeRequest extends SimpleRPCRequest {
 	
@@ -37,9 +38,8 @@ public class SimplePipeRequest extends SimpleRPCRequest {
 		
 	}
 
-	/**
-	 * @j2sNative
-	 */
+	private static boolean isJavaScript = false;
+
 	static {
 		SimpleSerializable.registerClassShortenName(SimplePipeSequence.class.getName(), "SPS");
 	}
@@ -319,7 +319,7 @@ public class SimplePipeRequest extends SimpleRPCRequest {
 							continue; // end of MODE_LOCAL_JAVA_THREAD
 						}
 						
-						SimplePipeRunnable r = SimplePipeHelper.getPipe(p.pipeKey);
+						SimplePipeRunnable r = SimplePipeHelper.getPipe(p.pipeKey, false);
 						if (r == null || !r.isPipeLive()) {
 							if (now - p.lastLiveDetected > p.pipeWaitClosingInterval()) {
 								p.pipeDestroy(); // Pipe's server side destroying
@@ -356,7 +356,7 @@ public class SimplePipeRequest extends SimpleRPCRequest {
 									if (response.indexOf("\"" + PIPE_STATUS_LOST + "\"") != -1) {
 										p.pipeAlive = false;
 										p.pipeLost();
-										SimplePipeHelper.removePipe(pipeKey);
+										SimplePipeHelper.removePipe(pipeKey, false);
 										// may need to inform user that connection is already lost!
 										synchronized (notifyingMutex) {
 											notifyingPipes.remove(p);
@@ -468,11 +468,6 @@ Clazz.addEvent (document, "keydown", function (e) {
 		request.open(method, url, true);
 		request.registerOnReadyStateChange(new XHRCallbackAdapter() {
 			public void onLoaded() {
-				boolean isJavaScript = false;
-				/**
-				 * @j2sNative
-				 * isJavaScript = true;
-				 */ {}
 				if (isJavaScript) { // for SCRIPT mode only
 					// For JavaScript, there is no #getResponseBytes
 					String responseText = request.getResponseText();
@@ -619,14 +614,10 @@ document.body.appendChild (iframe);
 var html = "<html><head><title></title>";
 html += "<script type=\"text/javascript\">\r\n";
 html += "window[\"$p1p3p$\"] = function (string) {\r\n";
-html += "		with (window.parent) {\r\n";
-html += "				net.sf.j2s.ajax.SimplePipeRequest.parseReceived (string);\r\n";
-html += "		};\r\n";
+html += "		window.parent.net.sf.j2s.ajax.SimplePipeRequest.parseReceived (string);\r\n";
 html += "};\r\n";
 html += "window[\"$p1p3b$\"] = function (key, result, sequence) {\r\n";
-html += "		with (window.parent) {\r\n";
-html += "				net.sf.j2s.ajax.SimplePipeRequest.pipeNotifyCallBack (key, result, sequence);\r\n";
-html += "		};\r\n";
+html += "		window.parent.net.sf.j2s.ajax.SimplePipeRequest.pipeNotifyCallBack (key, result, sequence);\r\n";
 html += "};\r\n";
 html += "</scr" + "ipt></head><body><script type=\"text/javascript\">\r\n";
 if (ClassLoader.isOpera)
@@ -777,7 +768,7 @@ document.body.appendChild (ifr);
 	}
 	
 	static void pipeNotifyCallBack(String key, String result, long sequence) {
-		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(key);
+		SimplePipeRunnable pipe = SimplePipeHelper.getPipe(key, false);
 		if (pipe != null) {
 			if (pipe.notifySequence < sequence) {
 				pipe.notifySequence = sequence;
@@ -785,7 +776,7 @@ document.body.appendChild (ifr);
 			if (result != null && result.length() == 1 && result.charAt(0) == PIPE_STATUS_LOST) {
 				pipe.pipeAlive = false;
 				pipe.pipeLost();
-				SimplePipeHelper.removePipe(key);
+				SimplePipeHelper.removePipe(key, false);
 			}
 		}
 		// only for JavaScript
@@ -805,11 +796,9 @@ document.body.appendChild (ifr);
 		
 			@Override
 			public void onLoaded() {
-				boolean isJavaScript = false;
 				/**
 				 * Maybe user click on refresh button!
 				 * @j2sNative
-				 * isJavaScript = true;
 				 * if (window == null || window["net"] == null) return;
 				 */ {}
 				if (pipeRequest.getStatus() != 200) {
@@ -891,6 +880,9 @@ document.body.appendChild (ifr);
 			}
 		};
 	}
+
+	// For JavaScript declaration only
+	native static void pipeContinuum(final SimplePipeRunnable runnable, String subdomain, boolean pipeContinued);
 
 	/**
 	 * Create pipe connection for the SimplePipeRunnable.
@@ -977,7 +969,7 @@ window.setTimeout (fun, spr.pipeLiveNotifyInterval);
 					String key = runnable.pipeKey;
 					if (pipeKey != null && pipeKey.equals(key)) {
 						runnable.pipeLost();
-						SimplePipeHelper.removePipe(key);
+						SimplePipeHelper.removePipe(key, false);
 					}
 				}
 				return true;
@@ -997,10 +989,10 @@ window.setTimeout (fun, spr.pipeLiveNotifyInterval);
 				String key = runnable.pipeKey;
 				if (pipeKey != null && pipeKey.equals(key)) {
 					runnable.pipeClosed(); // may set runnable.pipeKey = null;
-					SimplePipeHelper.removePipe(key);
+					SimplePipeHelper.removePipe(key, false);
 				} else { // broken, reconnected and already assigned another pipe key
 					// remove old pipe from pipe pool
-					SimplePipeHelper.removePipe(pipeKey);
+					SimplePipeHelper.removePipe(pipeKey, false);
 				}
 			}
 		
@@ -1078,14 +1070,14 @@ for (var i = 0; i < iframes.length; i++) {
 		while (string.length() > start + PIPE_KEY_LENGTH) { // should be bigger than 48 ( 32 + 6 + 1 + 8 + 1)
 			int end = start + PIPE_KEY_LENGTH;
 			String key = string.substring(start, end);
-			SimplePipeRunnable pipe = SimplePipeHelper.getPipe(key);
+			SimplePipeRunnable pipe = SimplePipeHelper.getPipe(key, false);
 			if (PIPE_STATUS_DESTROYED == string.charAt(end)) {
 				if (pipe != null) {
 					if (key.equals(pipe.pipeKey)) {
 						pipe.pipeAlive = false;
 						pipe.pipeClosed();
 					}
-					SimplePipeHelper.removePipe(key);
+					SimplePipeHelper.removePipe(key, false);
 				}
 				return string.substring(end + 1);
 			}
@@ -1102,11 +1094,6 @@ for (var i = 0; i < iframes.length; i++) {
 			if (pipe != null) { // should always satisfy this condition
 				pipe.lastPipeDataReceived = now;
 			}
-			boolean isJavaScript = false;
-			/**
-			 * @j2sNative
-			 * isJavaScript = true;
-			 */ {}
 			if (isJavaScript) { // for SCRIPT mode only
 				if (PIPE_STATUS_CONTINUE == string.charAt(end) ) {
 					if (pipe != null) { // should always satisfy this condition
@@ -1118,10 +1105,7 @@ for (var i = 0; i < iframes.length; i++) {
 							isSubdomain = isSubdomain(pipeURL);
 						}
 						String subdomain = adjustSubdomain(isSubdomain);
-						/**
-						 * @j2sNative
-						 * net.sf.j2s.ajax.SimplePipeRequest.pipeContinuum(runnable, subdomain, true);
-						 */ { subdomain.toString(); }
+						pipeContinuum(pipe, subdomain, true);
 					}
 					return string.substring(end + 1);
 				}
@@ -1189,35 +1173,27 @@ for (var i = 0; i < iframes.length; i++) {
 		while (bytes.length > start + PIPE_KEY_LENGTH) { // should be bigger than 48 ( 32 + 6 + 1 + 8 + 1)
 			int end = start + PIPE_KEY_LENGTH;
 			String key = new String(bytes, start, PIPE_KEY_LENGTH);
-			SimplePipeRunnable pipe = SimplePipeHelper.getPipe(key);
+			SimplePipeRunnable pipe = SimplePipeHelper.getPipe(key, false);
 			if (PIPE_STATUS_DESTROYED == bytes[end]) {
 				if (pipe != null) {
 					if (key.equals(pipe.pipeKey)) {
 						pipe.pipeAlive = false;
 						pipe.pipeClosed();
 					}
-					SimplePipeHelper.removePipe(key);
+					SimplePipeHelper.removePipe(key, false);
 				}
 				return end + 1;
 			}
+			if (pipe != null) { // should always satisfy this condition
+				pipe.lastPipeDataReceived = now;
+			}
 			if (PIPE_STATUS_OK == bytes[end]) {
-				if (pipe != null) { // should always satisfy this condition
-					pipe.lastPipeDataReceived = now;
-				}
 				start = end + 1;
 				if (start == bytes.length) {
 					return start;
 				}
 				continue;
 			}
-			if (pipe != null) { // should always satisfy this condition
-				pipe.lastPipeDataReceived = now;
-			}
-			boolean isJavaScript = false;
-			/**
-			 * @j2sNative
-			 * isJavaScript = true;
-			 */ {}
 			if (isJavaScript) { // for SCRIPT mode only
 				if (PIPE_STATUS_CONTINUE == bytes[end]) {
 					if (pipe != null) { // should always satisfy this condition
@@ -1229,10 +1205,7 @@ for (var i = 0; i < iframes.length; i++) {
 							isSubdomain = isSubdomain(pipeURL);
 						}
 						String subdomain = adjustSubdomain(isSubdomain);
-						/**
-						 * @j2sNative
-						 * net.sf.j2s.ajax.SimplePipeRequest.pipeContinuum(runnable, subdomain, true);
-						 */ { subdomain.toString(); }
+						pipeContinuum(pipe, subdomain, true);
 					}
 					return end + 1;
 				}
@@ -1377,20 +1350,18 @@ for (var i = 0; i < iframes.length; i++) {
 			isSubdomain = isSubdomain(pipeURL);
 		}
 
-		if ((!isXSS || isSubdomain) && pipeMode == MODE_PIPE_CONTINUUM)
-			/**
-			 * @j2sNative
-			 * var spr = net.sf.j2s.ajax.SimplePipeRequest;
-			 * var subdomain = spr.adjustSubdomain (isSubdomain);
-			 * spr.pipeContinuum (runnable, subdomain, false);
-			 */
-		{
-			//pipeQuery(runnable, "continuum");
-			SimpleThreadHelper.runTask(new Runnable(){
-				public void run() {
-					pipeContinuum(runnable);
-				}
-			}, "Simple Pipe Continuum Worker");
+		if ((!isXSS || isSubdomain) && pipeMode == MODE_PIPE_CONTINUUM) {
+			if (isJavaScript) { // for SCRIPT mode only
+				String subdomain = adjustSubdomain(isSubdomain);
+				pipeContinuum (runnable, subdomain, false);
+			} else {
+				//pipeQuery(runnable, "continuum");
+				SimpleThreadHelper.runTask(new Runnable(){
+					public void run() {
+						pipeContinuum(runnable);
+					}
+				}, "Simple Pipe Continuum Worker");
+			}
 		} else
 			/**
 			 * @j2sNative
@@ -1452,7 +1423,7 @@ runnable.queryEnded = true;
 			Thread queryThread = new Thread(new Runnable() {
 				public void run() {
 					SimplePipeRunnable runnable = null;
-					while ((runnable = SimplePipeHelper.getPipe(key)) != null && runnable.isPipeLive()) {
+					while ((runnable = SimplePipeHelper.getPipe(key, false)) != null && runnable.isPipeLive()) {
 						pipeQuery(runnable);
 						
 						long now = System.currentTimeMillis();
@@ -1466,7 +1437,7 @@ runnable.queryEnded = true;
 								runnable.pipeAlive = false;
 								runnable.pipeClosed();
 							}
-							SimplePipeHelper.removePipe(key);
+							SimplePipeHelper.removePipe(key, false);
 							return;
 						}
 
@@ -1480,7 +1451,7 @@ runnable.queryEnded = true;
 						runnable.pipeAlive = false;
 						runnable.pipeClosed();
 					}
-					SimplePipeHelper.removePipe(key);
+					SimplePipeHelper.removePipe(key, false);
 
 				}
 			}, "Simple Pipe Query Worker");
@@ -1529,14 +1500,11 @@ p.initParameters = function () {
 	this.pipeLiveNotifyInterval = 25000;
 	this.runnable = null;
 	this.lastXHR = -1;
-	var oThis = this;
-	with (window.parent) {
-		var sph = net.sf.j2s.ajax.SimplePipeHelper;
-		var spr = net.sf.j2s.ajax.SimplePipeRequest;
-		this.runnable = sph.getPipe(this.key);
-		this.pipeQueryInterval = spr.getQueryInterval ();
-		this.pipeLiveNotifyInterval = spr.pipeLiveNotifyInterval;
-	}
+	var sph = window.parent.net.sf.j2s.ajax.SimplePipeHelper;
+	var spr = window.parent.net.sf.j2s.ajax.SimplePipeRequest;
+	this.runnable = sph.getPipe(this.key);
+	this.pipeQueryInterval = spr.getQueryInterval ();
+	this.pipeLiveNotifyInterval = spr.pipeLiveNotifyInterval;
 	if (this.runnable == null) { // refreshing
 		eval ("(" + window.parent.net.sf.j2s.ajax.SimplePipeRequest.checkIFrameSrc + ") ();");
 	} else {
@@ -1570,23 +1538,19 @@ p.initHttpRequest = function () {
 				pipe.queryFailedRetries++;
 			} else {
 				pipe.queryFailedRetries = 0; // succeeded
-				with (window.parent) {
-					net.sf.j2s.ajax.SimplePipeRequest.parseReceived (pipeData);
-					oThis.runnable = net.sf.j2s.ajax.SimplePipeHelper.getPipe (oThis.key);
-				}
+				window.parent.net.sf.j2s.ajax.SimplePipeRequest.parseReceived (pipeData);
+				oThis.runnable = window.parent.net.sf.j2s.ajax.SimplePipeHelper.getPipe (oThis.key);
 			}
 			pipe.queryEnded = true;
 			var xhrHandle = oThis.xhrHandle;
-			with (window.parent) {
-				var pqMap = net.sf.j2s.ajax.SimplePipeRequest.pipeQueryMap;
-				for (var key in pqMap) {
-					if (typeof key == "string" && key.indexOf ("xhr." + pipe.pipeKey + ".") == 0) {
-						if (pqMap[key] == null || pqMap[key] === xhrHandle) {
-							delete pqMap[key];
-						} else {
-							delete pqMap[key];
-							pipe.queryEnded = false;
-						}
+			var pqMap = window.parent.net.sf.j2s.ajax.SimplePipeRequest.pipeQueryMap;
+			for (var key in pqMap) {
+				if (typeof key == "string" && key.indexOf ("xhr." + pipe.pipeKey + ".") == 0) {
+					if (pqMap[key] == null || pqMap[key] === xhrHandle) {
+						delete pqMap[key];
+					} else {
+						delete pqMap[key];
+						pipe.queryEnded = false;
 					}
 				}
 			}
@@ -1633,13 +1597,11 @@ return function () {
 	if (runnable != null) {
 		if (runnable.pipeKey != p.key) {
 			var key = p.key;
-			with (window.parent) {
-				try {
-					net.sf.j2s.ajax.SimplePipeHelper.removePipe (key);
-					net.sf.j2s.ajax.SimplePipeRequest.pipeIFrameClean (key);
-					return;
-				} catch (e) {
-				}
+			try {
+				window.parent.net.sf.j2s.ajax.SimplePipeHelper.removePipe (key);
+				window.parent.net.sf.j2s.ajax.SimplePipeRequest.pipeIFrameClean (key);
+				return;
+			} catch (e) {
 			}
 		}
 		var now = new Date ().getTime ();
@@ -1655,27 +1617,23 @@ return function () {
 			var url = null;
 			var data = null;
 			var key = p.key;
-			with (window.parent) {
-				try {
-					method = runnable.getPipeMethod ();
-					url = runnable.getPipeURL ();
-					var spr = net.sf.j2s.ajax.SimplePipeRequest;
-					data = spr.constructRequest(key, spr.PIPE_TYPE_QUERY, runnable.pipeSequence);
-				} catch (e) {
-				}
+			try {
+				method = runnable.getPipeMethod ();
+				url = runnable.getPipeURL ();
+				var spr = window.parent.net.sf.j2s.ajax.SimplePipeRequest;
+				data = spr.constructRequest(key, spr.PIPE_TYPE_QUERY, runnable.pipeSequence);
+			} catch (e) {
 			}
 			try {
 				document.domain = p.originalDomain;
 			} catch (e) {};
 			if (data == null) { // make sure that data is not null
-				with (window.parent) {
-					try {
-						method = runnable.getPipeMethod ();
-						url = runnable.getPipeURL ();
-						var spr = net.sf.j2s.ajax.SimplePipeRequest;
-						data = spr.constructRequest(key, spr.PIPE_TYPE_QUERY, runnable.pipeSequence);
-					} catch (e) {
-					}
+				try {
+					method = runnable.getPipeMethod ();
+					url = runnable.getPipeURL ();
+					var spr = window.parent.net.sf.j2s.ajax.SimplePipeRequest;
+					data = spr.constructRequest(key, spr.PIPE_TYPE_QUERY, runnable.pipeSequence);
+				} catch (e) {
 				}
 			}
 			try {
@@ -1683,9 +1641,8 @@ return function () {
 			} catch (e) {};
 			var xhrHandle = p.xhrHandle;
 			try {
-				with (window.parent) {
-					spr.pipeQueryMap["xhr." + key + "." + data] = xhrHandle;
-				}
+				var spr = window.parent.net.sf.j2s.ajax.SimplePipeRequest;
+				spr.pipeQueryMap["xhr." + key + "." + data] = xhrHandle;
 			} catch (e) {
 			}
 			try {
@@ -1703,14 +1660,12 @@ return function () {
 				|| now - last > 3 * p.pipeLiveNotifyInterval) {
 			document.domain = p.parentDomain;
 			var key = p.key;
-			with (window.parent) {
-				if (runnable.pipeKey == key) {
-					runnable.pipeAlive = false;
-					runnable.pipeClosed ();
-				}
-				net.sf.j2s.ajax.SimplePipeHelper.removePipe (key);
-				net.sf.j2s.ajax.SimplePipeRequest.pipeIFrameClean (key);
+			if (runnable.pipeKey == key) {
+				runnable.pipeAlive = false;
+				runnable.pipeClosed ();
 			}
+			window.parent.net.sf.j2s.ajax.SimplePipeHelper.removePipe (key);
+			window.parent.net.sf.j2s.ajax.SimplePipeRequest.pipeIFrameClean (key);
 		} else {
 			window.setTimeout (arguments.callee, p.pipeQueryInterval);
 		}
@@ -1724,13 +1679,11 @@ return function () {
 try {
 	var curLoc = "" + window.location;
 	var existed = false;
-	with (window.parent) {
-		var iframes = document.getElementsByTagName ("IFRAME");
-		for (var i = 0; i < iframes.length; i++) {
-			if (iframes[i].src == curLoc) {
-				existed = true;
-				break;
-			}
+	var iframes = window.parent.document.getElementsByTagName ("IFRAME");
+	for (var i = 0; i < iframes.length; i++) {
+		if (iframes[i].src == curLoc) {
+			existed = true;
+			break;
 		}
 	}
 	if (!existed) { // refreshing in Firefox 3.0 will trigger this scenario
@@ -1738,13 +1691,11 @@ try {
 		if (idx != -1) {
 			var urlPrefix = curLoc.substring (0, idx);
 			var goalURL = null;
-			with (window.parent) {
-				var iframes = document.getElementsByTagName ("IFRAME");
-				for (var i = 0; i < iframes.length; i++) {
-					if (iframes[i].src.indexOf (urlPrefix) == 0) {
-						goalURL = iframes[i].src;
-						break;
-					}
+			var iframes = window.parent.document.getElementsByTagName ("IFRAME");
+			for (var i = 0; i < iframes.length; i++) {
+				if (iframes[i].src.indexOf (urlPrefix) == 0) {
+					goalURL = iframes[i].src;
+					break;
 				}
 			}
 			if (goalURL != null) {
