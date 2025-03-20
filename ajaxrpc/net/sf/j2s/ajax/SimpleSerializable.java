@@ -2253,6 +2253,14 @@ if (ss != null) {
 	}
 	
 	@J2SIgnore
+	private String wrapAsJSONString(String str) {
+		return str.replaceAll("\r", "\\\\r")
+				.replaceAll("\n", "\\\\n")
+				.replaceAll("\t", "\\\\t")
+				//.replaceAll("\'", "\\\\\'") // Invalid for JSON
+				.replaceAll("\"", "\\\\\"");
+	}
+	@J2SIgnore
 	private String jsonSerialize(SimpleFilter filter, List<SimpleSerializable> ssObjs, boolean withFormats, String linePrefix) {
 		String prefix = linePrefix;
 		StringBuilder builder = new StringBuilder(1024);
@@ -2306,11 +2314,7 @@ if (ss != null) {
 						builder.append("null");
 					} else {
 						builder.append('\"');
-						builder.append(str.replaceAll("\r", "\\r")
-								.replaceAll("\n", "\\n")
-								.replaceAll("\t", "\\t")
-								.replaceAll("\'", "\\'")
-								.replaceAll("\"", "\\\""));
+						builder.append(wrapAsJSONString(str));
 						builder.append('\"');
 					}
 				} else if (clazz == long.class) {
@@ -2394,11 +2398,7 @@ if (ss != null) {
 								builder.append("null");
 							} else {
 								builder.append('\"');
-								builder.append(str.replaceAll("\r", "\\r")
-										.replaceAll("\n", "\\n")
-										.replaceAll("\t", "\\t")
-										.replaceAll("\'", "\\'")
-										.replaceAll("\"", "\\\""));
+								builder.append(wrapAsJSONString(str));
 								builder.append('\"');
 							}
 							if (i != xs.length - 1) {
