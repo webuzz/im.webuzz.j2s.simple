@@ -27,13 +27,15 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+//import java.util.concurrent.ConcurrentHashMap;
 
 import net.sf.j2s.annotation.J2SIgnore;
 import net.sf.j2s.annotation.J2SKeep;
@@ -216,7 +218,10 @@ public class SimpleSerializable implements Cloneable {
 	static Map<String, Field> getSerializableFields(Class<?> clazz) {
 		Map<String, Field> fields = quickFields.get(clazz);
 		if (fields == null) {
-			fields = new ConcurrentHashMap<String, Field>();
+			// Use LinkedHashMap instead of ConcurrentHashMap
+			// so that we preserve insertion order
+			fields = new LinkedHashMap<String, Field>();
+			//fields = new ConcurrentHashMap<String, Field>();
 			Class<?> oClazz = clazz;
 			while (oClazz != null && !"net.sf.j2s.ajax.SimpleSerializable".equals(oClazz.getName())) {
 				Field[] clazzFields = oClazz.getDeclaredFields();
@@ -2260,6 +2265,38 @@ if (ss != null) {
 				//.replaceAll("\'", "\\\\\'") // Invalid for JSON
 				.replaceAll("\"", "\\\\\"");
 	}
+	
+	@J2SIgnore
+	private static Class<?> getRawType(Type vType) {
+		if (vType instanceof GenericArrayType) {
+			GenericArrayType aType = (GenericArrayType) vType;
+			Type valueType = aType.getGenericComponentType();
+			if (valueType instanceof Class<?>) {
+				return Array.newInstance((Class<?>) valueType, 0).getClass();
+			} else {
+				return Array.newInstance(getRawType(valueType), 0).getClass();
+			}
+		}
+		if (vType instanceof ParameterizedType) {
+			return (Class<?>) ((ParameterizedType) vType).getRawType();
+		}
+		if (vType instanceof WildcardType) {
+			WildcardType wType = (WildcardType) vType;
+			Type[] upperBounds = wType.getUpperBounds();
+			if (upperBounds != null && upperBounds.length > 0) {
+				return getRawType(upperBounds[0]);
+			}
+			Type[] lowerBounds = wType.getLowerBounds();
+			if (lowerBounds != null && lowerBounds.length > 0) {
+				return getRawType(lowerBounds[0]);
+			}
+		}
+		if (vType instanceof Class<?>) {
+			return (Class<?>) vType;
+		}
+		throw new RuntimeException("Unknown raw type for " + vType);
+	}
+
 	@J2SIgnore
 	private String jsonSerialize(SimpleFilter filter, List<SimpleSerializable> ssObjs, boolean withFormats, String linePrefix) {
 		String prefix = linePrefix;
@@ -2355,6 +2392,104 @@ if (ss != null) {
 					} else {
 						ssObjs.add(o);
 						builder.append(o.jsonSerialize(null, ssObjs, withFormats, prefix));
+					}
+				} else if (List.class.isAssignableFrom(clazz)
+						|| Set.class.isAssignableFrom(clazz)) {
+					Type paramType = field.getGenericType();
+					Type valueParamType = null;
+					if (paramType instanceof ParameterizedType) {
+						valueParamType = ((ParameterizedType) paramType).getActualTypeArguments()[0];
+						clazz = getRawType(valueParamType);
+					}
+					if (clazz == String.class) {
+						@SuppressWarnings({ "rawtypes", "unchecked" })
+						List<String> xs = (List) field.get(this);
+						if (xs == null && ignoring) {
+							continue;
+						}
+						appendFieldName(builder, fieldName, withFormats, prefix);
+						builder.append('[');
+						if (withFormats) {
+							builder.append("\r\n");
+						}
+						int i = 0;
+						int length = xs.size();
+						for (String str: xs) {
+							if (withFormats) {
+								builder.append(prefix);
+								builder.append('\t');
+							}
+							if (str == null) {
+								builder.append("null");
+							} else {
+								builder.append('\"');
+								builder.append(wrapAsJSONString(str));
+								builder.append('\"');
+							}
+							if (i != length - 1) {
+								builder.append(',');
+							}
+							if (withFormats) {
+								builder.append("\r\n");
+							}
+							i++;
+						}
+						if (withFormats) {
+							builder.append(prefix);
+						}
+						builder.append(']');
+					} else if (isSubclassOf(clazz, SimpleSerializable.class) || clazz == SimpleSerializable.class) {
+						@SuppressWarnings({ "rawtypes", "unchecked" })
+						List<SimpleSerializable> xs = (List) field.get(this);
+						if (xs == null && ignoring) {
+							continue;
+						}
+						appendFieldName(builder, fieldName, withFormats, prefix);
+						builder.append('[');
+						if (withFormats) {
+							builder.append("\r\n");
+						}
+						int i = 0;
+						int length = xs.size();
+						for (SimpleSerializable o: xs) {
+							if (withFormats) {
+								builder.append(prefix);
+								builder.append('\t');
+							}
+							if (o == null) {
+								builder.append("null");
+							} else {
+								int idx = -1;
+								if (!this.jsonExpandMode()) {
+									idx = ssObjs.indexOf(o);
+								}
+								if (idx != -1) {
+									if (withFormats) {
+										builder.append("{ \"@\" : ");
+										builder.append(idx);
+										builder.append(" }");
+									} else {
+										builder.append("{\"@\":");
+										builder.append(idx);
+										builder.append('}');
+									}
+								} else {
+									ssObjs.add(o);
+									builder.append(o.jsonSerialize(null, ssObjs, withFormats, prefix + "\t"));
+								}
+							}
+							if (i != length - 1) {
+								builder.append(',');
+							}
+							if (withFormats) {
+								builder.append("\r\n");
+							}
+							i++;
+						}
+						if (withFormats) {
+							builder.append(prefix);
+						}
+						builder.append(']');
 					}
 				} else if (clazz.isArray()) {
 					clazz = clazz.getComponentType();
@@ -5348,12 +5483,12 @@ return ssz.UNKNOWN;
 		int index = str.indexOf('#', start);
 		if (index == -1) return null;
 		String clazzName = str.substring(start + 6, index);
-		if (v >= 202) {
+		//if (v >= 202) {
 			String longClazzName = classAliasMappings.get(clazzName);
 			if (longClazzName != null) {
 				clazzName = longClazzName;
 			}
-		}
+		//}
 		if (filter != null) {
 			if (!filter.accept(clazzName)) return null;
 		}
