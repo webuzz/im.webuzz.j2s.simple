@@ -63,6 +63,8 @@ public class SimpleSerializable implements Cloneable {
 
 	public static boolean BYTES_COMPACT_MODE = false;
 
+	public static boolean OBJECT_EXPAND_MODE = true;
+	
 	public static boolean JSON_EXPAND_MODE = true;
 
 	public static int LATEST_SIMPLE_VERSION = 202;
@@ -2170,7 +2172,10 @@ if (ss != null) {
 			List<SimpleSerializable> ssObjs, boolean supportsCompactBytes) {
 		char baseChar = 'B';
 		if (ss != null) {
-			int idx = ssObjs.indexOf(ss);
+			int idx = -1;
+			if (!objectExpandMode()) {
+				idx = ssObjs.indexOf(ss);
+			}
 			if (idx != -1) {
 				builder.append('o');
 				String value = String.valueOf(idx);
@@ -2199,12 +2204,19 @@ if (ss != null) {
 		}
 	}
 	
+	protected boolean objectExpandMode() {
+		return OBJECT_EXPAND_MODE;
+	}
+	
 	@J2SIgnore
 	private void serializeBytesObject(DataOutputStream dos, SimpleSerializable ss,
 			List<SimpleSerializable> ssObjs, boolean supportsCompactBytes) throws IOException {
 		char baseChar = 'B';
 		if (ss != null) {
-			int idx = ssObjs.indexOf(ss);
+			int idx = -1;
+			if (!objectExpandMode()) {
+				idx = ssObjs.indexOf(ss);
+			}
 			if (idx != -1) {
 				dos.writeByte('o');
 				String value = String.valueOf(idx);
@@ -2259,7 +2271,9 @@ if (ss != null) {
 	
 	@J2SIgnore
 	private String wrapAsJSONString(String str) {
-		return str.replaceAll("\r", "\\\\r")
+		return str
+				.replaceAll("\\\\", "\\\\\\\\")
+				.replaceAll("\r", "\\\\r")
 				.replaceAll("\n", "\\\\n")
 				.replaceAll("\t", "\\\\t")
 				//.replaceAll("\'", "\\\\\'") // Invalid for JSON
@@ -2740,7 +2754,9 @@ if (ss != null) {
 						for (int i = 0; i < xs.length; i++) {
 							char c = xs[i];
 							builder.append("\'");
-							if (c == '\r') {
+							if (c == '\\') {
+								builder.append("\\\\");
+							} else if (c == '\r') {
 								builder.append("\\r");
 							} else if (c == '\n') {
 								builder.append("\\n");
@@ -2847,7 +2863,9 @@ if (ss != null) {
 					}
 					appendFieldName(builder, fieldName, withFormats, prefix);
 					builder.append('\'');
-					if (c == '\r') {
+					if (c == '\\') {
+						builder.append("\\\\");
+					} else if (c == '\r') {
 						builder.append("\\r");
 					} else if (c == '\n') {
 						builder.append("\\n");

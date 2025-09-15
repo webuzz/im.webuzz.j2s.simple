@@ -559,6 +559,9 @@ public class HttpRequest {
 				if (checkAbort()) return; // exception caused by abort action
 				e.printStackTrace();
 				status = connection.getResponseCode();
+				statusText = connection.getResponseMessage();
+				Object responseContent = connection.getContent();
+				responseText = responseContent.toString();
 				if (readyState != 4) {
 					readyState = 4;
 					if (onreadystatechange != null) {
